@@ -8,15 +8,15 @@ entrypoints Prog ;
 Prog.     Prog   ::= [Decl] ;
 
 -- Expressions
-ECoh.     Exp ::= "[" Exp "|" Exp "]"
-EVar.     Exp ::= Ident
+ECoh.     Exp ::= "[" Exp "|" Exp "]" ;
+EVar.     Exp ::= Ident ;
 
 -- Telescopes
 Tele.     Tele ::= "(" Patt ":" Exp ")" ;
 terminator Tele "" ;
 
 -- declarations
-Def.      Decl ::= "let" Ident [Tele] ":" Exp1 "=" Exp1 ;
+Def.      Decl ::= "let" Ident [Tele] ":" Exp "=" Exp ;
 separator Decl ";" ;
 
 -- patterns
