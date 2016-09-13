@@ -1,0 +1,38 @@
+--
+--  demo.catt - demonstation of catt typechecking
+--
+
+coh id (x : *) : * | x -> x ;
+
+coh comp (x : *)
+    	 (y : *) (f : * | x -> y)
+	 (z : *) (g : * | y -> z)
+	 : * | x -> z ;
+
+let compl (x : *)
+    	  (y : *) (f : * | x -> y)
+          (z : *) (g : * | y -> z)
+	  (w : *) (h : * | z -> w)
+	  : * | x -> w
+	  = comp(x, z, w, comp(x, y, z, f, g), h) ;
+
+let compr (x : *)
+    	  (y : *) (f : * | x -> y)
+          (z : *) (g : * | y -> z)
+	  (w : *) (h : * | z -> w)
+	  : * | x -> w
+	  = comp(x, y, w, f, comp(y, z, w, g, h)) ;
+
+coh assoc (x : *)
+    	  (y : *) (f : * | x -> y)
+          (z : *) (g : * | y -> z)
+	  (w : *) (h : * | z -> w)
+	  : * | x -> w | compr(x, y, z, w, f, g, h) -> compl(x, y, z, w, f, g, h) ;
+
+coh vcomp (x : *)
+    	  (y : *) (f : * | x -> y)
+	  (g : * | x -> y) (a : * | x -> y | f -> g)
+	  (h : * | x -> y) (b : * | x -> Y | g -> h)
+	  : * | x -> y | f -> h 
+
+
