@@ -1,0 +1,27 @@
+--- Input file to BNF Converter
+---   This describes the labelled BNF Grammar of
+---   Mini-TT concrete syntax
+
+entrypoints Prog ;
+
+-- Programs
+Prog.     Prog   ::= [Decl] ;
+
+-- Expressions
+ECoh.     Exp ::= "[" Exp "|" Exp "]"
+EVar.     Exp ::= Ident
+
+-- Telescopes
+Tele.     Tele ::= "(" Patt ":" Exp ")" ;
+terminator Tele "" ;
+
+-- declarations
+Def.      Decl ::= "let" Ident [Tele] ":" Exp1 "=" Exp1 ;
+separator Decl ";" ;
+
+-- patterns
+PUnit.    Patt   ::= "_" ;
+PVar.     Patt   ::= Ident ;
+
+comment "--" ;
+comment "{-" "-}" ;
