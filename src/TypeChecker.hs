@@ -16,16 +16,12 @@ import Syntax.PrintCatt
 --  Semantic Domain
 --
 
-data D = VarD Ident
+data D = VarD Ident | CohD Ident
        | TypeD | StarD
        | ArrD D D D
        | PiD D (D -> D)
        | AppD D D
-       | LamD (D -> D)
 
-appD :: D -> D -> D
-appD (LamD f) d = f d
-  
 --
 --  Terms
 --
@@ -34,44 +30,70 @@ data Term = Type | Star
           | Var Ident | Cohr Ident
           | Arr Term Term Term
           | Pi Ident Term Term
-          | Lam Ident Term
           | App Term Term
+          deriving (Eq, Show)
 
 --
 --  Evaluation and Readback
 --
 
-evalTyp :: Typ -> Term
-evalTyp TStar = Star
-evalTyp (TArr frm src tgt) = Arr (evalTyp frm) (evalExp src) (evalExp tgt)
+typToTerm :: Typ -> Term
+typToTerm TStar = Star
+typToTerm (TArr frm src tgt) = Arr (typToTerm frm) (expToTerm src) (expToTerm tgt)
 
-evalExp :: Exp -> Term
-evalExp (EVar id) = Var id
-evalExp (ECoh id) = Cohr id
-evalExp (EApp u v) = App (evalExp u) (evalExp v)
+expToTerm :: Exp -> Term
+expToTerm (EVar id) = Var id
+expToTerm (ECoh id) = Cohr id
+expToTerm (EApp u v) = App (expToTerm u) (expToTerm v)
 
--- eval :: Term -> Rho -> D
--- eval Type              rho = TypeD
--- eval Star              rho = StarD
--- eval (Var id)          rho = getRho id rho
--- eval (Arr frm src tgt) rho = ArrD (eval frm rho) (eval src rho) (eval tgt rho)
--- eval (Pi id a f)       rho = PiD (eval a rho) (\d -> eval f $ UpVar rho id d)
--- eval (Lam id u)        rho = LamD (\d -> eval u $ UpVar rho id d)
--- eval (App u v)         rho = appD (eval u rho) (eval v rho)
+typToDom :: Typ -> D
+typToDom TStar = StarD
+typToDom (TArr frm src tgt) = ArrD (typToDom frm) (expToDom src) (expToDom tgt)
 
--- rb :: D -> Int -> Term
--- rb TypeD              k = Type
--- rb StarD              k = Star
--- rb (VarD id)          k = Var id
--- rb (ArrD frm src tgt) k = Arr (rb frm k) (rb src k) (rb tgt k)
--- rb (PiD a f)          k = let id = Ident $ "RB#" ++ show k
---                           in Pi id (rb a k) (rb (f $ VarD id) (k+1))
--- rb (LamD f)           k = let id = Ident $ "RB#" ++ show k
---                           in Lam id (rb (f $ VarD id) (k+1))
+expToDom :: Exp -> D
+expToDom (EVar id) = VarD id
+expToDom (ECoh id) = CohD id
+expToDom (EApp u v) = AppD (expToDom u) (expToDom v)
+
+
+eval :: Term -> Rho -> D
+eval Type              rho = TypeD
+eval Star              rho = StarD
+eval (Var id)          rho = getRho id rho
+eval (Cohr id)         rho = CohD id
+eval (Arr frm src tgt) rho = ArrD (eval frm rho) (eval src rho) (eval tgt rho)
+eval (Pi id a f)       rho = PiD (eval a rho) (\d -> eval f $ UpVar rho id d)
+eval (App u v)         rho = AppD (eval u rho) (eval v rho)
+
+rb :: D -> Int -> Term
+rb TypeD              k = Type
+rb StarD              k = Star
+rb (VarD id)          k = Var id
+rb (CohD id)          k = Cohr id
+rb (ArrD frm src tgt) k = Arr (rb frm k) (rb src k) (rb tgt k)
+rb (PiD a f)          k = let id = Ident $ "RB#" ++ show k
+                          in Pi id (rb a k) (rb (f $ VarD id) (k+1))
+rb (AppD u v)         k = App (rb u k) (rb v k)                             
 
 --
 --  Typechecking Environment
 --
+
+data Rho = RNil
+         | UpCoh Rho Ident 
+         | UpVar Rho Ident D
+
+getRho :: Ident -> Rho -> D
+getRho id' RNil = error $ "Unknown id in environment: " ++ show (printTree id')
+getRho id' (UpCoh rho id) | id == id' = CohD id
+getRho id' (UpCoh rho id) | otherwise = getRho id' rho
+getRho id' (UpVar rho id d) | id == id' = d
+getRho id' (UpVar rho id d) | otherwise = getRho id' rho
+         
+lRho :: Rho -> Int
+lRho RNil = 0
+lRho (UpCoh rho _) = lRho rho
+lRho (UpVar rho _ _) = lRho rho + 1
 
 data TCtxt = TNil Ident
            | TCns TCtxt (Ident, Typ) (Ident, Typ)
@@ -105,11 +127,24 @@ marker (TTgt tc) =
     _ -> error "Internal error"
     
 type Gamma = [(Ident, D)]
-data TCEnv = TCEnv { gma :: Gamma }
+data TCEnv = TCEnv { gma :: Gamma
+                   , rho :: Rho
+                   }
+
+appendTree :: TCtxt -> Gamma -> Gamma
+appendTree (TNil id) gma = (id,StarD):gma
+appendTree (TCns tc (tId,tFrm) (fId, fFrm)) gma =
+  let fTy = typToDom fFrm
+      tTy = typToDom tFrm
+  in (fId,fTy):(tId,tTy):(appendTree tc gma)
+appendTree (TTgt tc) gma = appendTree tc gma
+
+withTree :: TCtxt -> TCEnv -> TCEnv
+withTree tc env = TCEnv (appendTree tc $ gma env) (rho env)
 
 -- Yeah, you should make a real empty environment
 emptyEnv :: TCEnv
-emptyEnv = TCEnv [] 
+emptyEnv = TCEnv [] RNil
 
 --
 --  Typechecking Monad
@@ -117,15 +152,22 @@ emptyEnv = TCEnv []
 
 type TCM = ReaderT TCEnv (ExceptT String IO)
 
--- tcLookup :: Ident -> TCM D
--- tcLookup id = do gma <- reader gma
---                  case lookup id gma of
---                    Just d -> return d
---                    Nothing -> throwError $ "Unknown identifier: " ++ show id
+tcLookup :: Ident -> TCM D
+tcLookup id = do gma <- reader gma
+                 case lookup id gma of
+                   Just ty -> return ty
+                   Nothing -> throwError $ "Unknown identifier: " ++ show id
 
--- tcExtPi :: D -> TCM (D, D -> D)
--- tcExtPi (PiD a f) = return (a, f)
--- tcExtPi _ = throwError "tcExtPi"
+tcDepth :: TCM Int
+tcDepth = reader (lRho . rho)
+
+tcEval :: Term -> TCM D
+tcEval t = do rho <- reader rho
+              return (eval t rho)
+  
+tcExtPi :: D -> TCM (D, D -> D)
+tcExtPi (PiD a f) = return (a, f)
+tcExtPi _ = throwError "tcExtPi"
 
 tcExtSrc :: Typ -> TCM (Exp, Typ)
 tcExtSrc (TArr h s _) = return (s, h)
@@ -147,10 +189,6 @@ typVars :: Typ -> Set Ident
 typVars TStar = empty
 typVars (TArr frm src tgt) = (typVars frm) `union` (expVars src) `union` (expVars tgt)
 
--- Okay.  This is a problem since in the syntax, coherences are not
--- distinguished from variables.  But do we care?  We are going to
--- check that the context variable set is contained in this, and we
--- don't care if there's extra.
 expVars :: Exp -> Set Ident
 expVars (EVar id) = singleton id
 expVars (ECoh id) = empty
@@ -221,18 +259,18 @@ checkDecl (Coh id pms ty) =
                                          isAlgebraic = ctxVars `isSubsetOf` tyVars
                                          srcCtxt = if isAlgebraic then tctx else (source (ctxtDim tctx - 1) tctx)
                                          tgtCtxt = if isAlgebraic then tctx else (target (ctxtDim tctx - 1) tctx)
-
                                      
-                                     -- Okay, we're all set.  In order to proceed with the typechecking,
-                                     -- we need to extend whatever context we're in with the tree context
-                                     -- variables and the check locally with respect to that context.
+                                     -- _ <- local (withTree srcCtxt) $ do srcFrmT <- checkT srcFrm
+                                     --                                    srcExpT <- check srcExp srcFrmT
+                                     --                                    return ()
+                                     -- _ <- local (withTree tgtCtxt) $ do tgtFrmT <- checkT tgtFrm
+                                     --                                    tgtExpT <- check tgtExp tgtFrmT
+                                     --                                    return ()
+                                     
+                                     -- The last thing is that each of the source/target needs to be
+                                     -- algebraic in it's respective context.
                                      
                                      return ()
-
-                                     -- Okay, now what?  Our goal now is to check the
-                                     -- type.  I don't think coverage or anything will
-                                     -- be that hard. What I'm more worried about is
-                                     -- how they types will be stored in the context.
 
 checkDecl (Def id pms ty exp) = return ()
 
@@ -256,30 +294,32 @@ checkTree tc tl@((Tele tId tFrm):(Tele fId fFrm):ps) =
 checkT :: Typ -> TCM Term
 checkT t = case t of
   TStar            -> return Star
-  TArr frm src tgt -> undefined
-  
--- checkT :: Typ -> TCM Term
--- checkT t = case t of
---   TStar            -> return Star
---   TArr frm src tgt -> do frmT <- checkT frm
---                          frmD <- tcEval frmT
---                          srcT <- check src frmD
---                          tgtT <- check tgt frmD
---                          return $ Arr frmT srcT tgtT
+  TArr frm src tgt -> do frmT <- checkT frm
+                         frmD <- tcEval frmT
+                         srcT <- check src frmD
+                         tgtT <- check tgt frmD
+                         return $ Arr frmT srcT tgtT
 
--- check :: Exp -> D -> TCM Term
--- check e t = undefined
+check :: Exp -> D -> TCM Term
+check e t = do (eTm, eTy) <- checkI e
+               k <- tcDepth
+               let t0 = rb t k
+                   t1 = rb eTy k
+               if (t0 == t1) then return eTm
+                 else throwError $ show t0 ++ " =/= " ++ show t1 ++ " while checking " ++ printTree e
 
--- checkI :: Exp -> TCM (Term, D)
--- checkI e = 
---   case e of
---     EVar id  -> do d <- tcLookup id 
---                    return (Var id, d)
---     EApp u v -> do (uT, uTy) <- checkI u
---                    uD <- tcEval uT
---                    (a, f) <- tcExtPi uTy
---                    vT <- check v a
---                    return (App uT vT, f uD)
+checkI :: Exp -> TCM (Term, D)
+checkI e = 
+  case e of
+    EVar id  -> do ty <- tcLookup id 
+                   return (Var id, ty)
+    ECoh id  -> do ty <- tcLookup id
+                   return (Cohr id, ty)
+    EApp u v -> do (uT, uTy) <- checkI u
+                   uD <- tcEval uT
+                   (a, f) <- tcExtPi uTy
+                   vT <- check v a
+                   return (App uT vT, f uD)
                    
 
 debug :: String -> TCM ()
