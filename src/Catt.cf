@@ -8,9 +8,9 @@ entrypoints Prog ;
 Prog.     Prog   ::= [Decl] ;
 
 -- Expressions
-EApp.     Exp ::= Ident "(" [Exp] ")" ;
-EVar.     Exp ::= Ident ;
-separator Exp "," ;
+EApp.     Exp  ::= Exp Exp1 ;
+EVar.     Exp1 ::= Ident ;
+coercions Exp 1 ;
 
 TStar.    Typ ::= "*" ;
 TArr.     Typ ::= Typ "|" Exp "->" Exp ;

@@ -9,25 +9,12 @@ coh comp (x : *)
 	 (z : *) (g : * | y -> z)
 	 : * | x -> z ;
 
-let compl (x : *)
-    	  (y : *) (f : * | x -> y)
-          (z : *) (g : * | y -> z)
-	  (w : *) (h : * | z -> w)
-	  : * | x -> w
-	  = comp(x, z, w, comp(x, y, z, f, g), h) ;
-
-let compr (x : *)
-    	  (y : *) (f : * | x -> y)
-          (z : *) (g : * | y -> z)
-	  (w : *) (h : * | z -> w)
-	  : * | x -> w
-	  = comp(x, y, w, f, comp(y, z, w, g, h)) ;
-
 coh assoc (x : *)
     	  (y : *) (f : * | x -> y)
           (z : *) (g : * | y -> z)
 	  (w : *) (h : * | z -> w)
-	  : * | x -> w | compr(x, y, z, w, f, g, h) -> compl(x, y, z, w, f, g, h) ;
+	  : * | x -> w | comp x z w (comp x y z f g) h ->
+	      	       	 comp x y w f (comp y z w g h) ;
 
 coh vcomp (x : *)
     	  (y : *) (f : * | x -> y)
