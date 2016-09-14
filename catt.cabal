@@ -19,7 +19,7 @@ executable catt
   main-is:             Main.hs
   -- other-modules:       
   -- other-extensions:    
-  build-depends:       base >=4.7, array >=0.5 && <0.6, mtl >= 2.2.1 
+  build-depends:       base >=4.7, array >=0.5 && <0.6, mtl >= 2.2.1, containers >= 0.5
   hs-source-dirs:      src
   default-language:    Haskell2010
   build-tools:         alex, happy

@@ -9,6 +9,7 @@ Prog.     Prog   ::= [Decl] ;
 
 -- Expressions
 EApp.     Exp  ::= Exp Exp1 ;
+ECoh.     Exp  ::= "#" Ident ;
 EVar.     Exp1 ::= Ident ;
 coercions Exp 1 ;
 

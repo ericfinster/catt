@@ -4,6 +4,8 @@
 
 module TypeChecker where
 
+import Data.Set
+
 import Control.Monad.Except
 import Control.Monad.Reader
 
@@ -28,24 +30,25 @@ appD (LamD f) d = f d
 --  Terms
 --
 
--- data Term = Var Ident
---           | Type | Star 
---           | Arr Term Term Term
---           | Pi Ident Term Term
---           | Lam Ident Term
---           | App Term Term
+data Term = Type | Star
+          | Var Ident | Cohr Ident
+          | Arr Term Term Term
+          | Pi Ident Term Term
+          | Lam Ident Term
+          | App Term Term
 
 --
 --  Evaluation and Readback
 --
 
-evalTyp :: Typ -> D
-evalTyp TStar = StarD
-evalTyp (TArr frm src tgt) = ArrD (evalTyp frm) (evalExp src) (evalExp tgt)
+evalTyp :: Typ -> Term
+evalTyp TStar = Star
+evalTyp (TArr frm src tgt) = Arr (evalTyp frm) (evalExp src) (evalExp tgt)
 
-evalExp :: Exp -> D
-evalExp (EVar id) = VarD id
-evalExp (EApp u v) = AppD (evalExp u) (evalExp v)
+evalExp :: Exp -> Term
+evalExp (EVar id) = Var id
+evalExp (ECoh id) = Cohr id
+evalExp (EApp u v) = App (evalExp u) (evalExp v)
 
 -- eval :: Term -> Rho -> D
 -- eval Type              rho = TypeD
@@ -102,8 +105,6 @@ marker (TTgt tc) =
     _ -> error "Internal error"
     
 type Gamma = [(Ident, D)]
-type Delta = [(Ident, Typ)]
-
 data TCEnv = TCEnv { gma :: Gamma }
 
 -- Yeah, you should make a real empty environment
@@ -142,11 +143,34 @@ typeDim :: Typ -> Int
 typeDim TStar = 0
 typeDim (TArr t _ _) = typeDim t + 1
 
+typVars :: Typ -> Set Ident
+typVars TStar = empty
+typVars (TArr frm src tgt) = (typVars frm) `union` (expVars src) `union` (expVars tgt)
+
+-- Okay.  This is a problem since in the syntax, coherences are not
+-- distinguished from variables.  But do we care?  We are going to
+-- check that the context variable set is contained in this, and we
+-- don't care if there's extra.
+expVars :: Exp -> Set Ident
+expVars (EVar id) = singleton id
+expVars (ECoh id) = empty
+expVars (EApp u v) = (expVars u) `union` (expVars v)
+
+ctxtVars :: TCtxt -> Set Ident
+ctxtVars (TNil id) = singleton id
+ctxtVars (TCns tc (tId, _) (fId, _)) = insert tId (insert fId $ ctxtVars tc)
+ctxtVars (TTgt tc) = ctxtVars tc
+  
 ctxtDim :: TCtxt -> Int
 ctxtDim (TNil id) = 0
 ctxtDim (TCns tc (tId, tFrm) (fId, fFrm)) = max (typeDim fFrm) (ctxtDim tc)
 ctxtDim (TTgt tc) = ctxtDim tc  
   
+--
+-- I'm worried about what happens to the target marker here.
+-- It looks to me like they all get preserved.  But this can't
+-- be right, can it? 
+--
 source :: Int -> TCtxt -> TCtxt
 source i (TNil id) = TNil id
 source i (TCns tc (tId, tFrm) (fId, fFrm)) | i <= typeDim tFrm = source i tc
@@ -161,11 +185,6 @@ target i (TCns tc (tId, tFrm) (fId, fFrm)) | i <= typeDim tFrm = target i (rewin
         rewindTo tgtId tgtFrm (TTgt tc) = rewindTo tgtId tgtFrm tc
         rewindTo tgtId tgtFrm (TCns tc' (pId, pFrm) (qId, qFrm)) | tgtFrm == qFrm = TCns tc' (pId, pFrm) (tgtId, tgtFrm)
         rewindTo tgtId tgtFrm (TCns tc' (pId, pFrm) (qId, qFrm)) | otherwise = rewindTo tgtId tgtFrm tc'
-                              
-  -- This is trickier.  We want to rewind to the place where the source
-  -- was added, necessarily, I suppose as a filler, and replace that source
-  -- extension with the value of the target.
-                                           
 
 target i (TCns tc (tId, tFrm) (fId, fFrm)) | i > typeDim tFrm = TCns (target i tc) (tId, tFrm) (fId, fFrm)
 target i (TTgt tc) = TTgt (target i tc)
@@ -190,16 +209,33 @@ checkDecl (Coh id pms ty) =
                                      debug $ "Result: " ++ show tctx
                                      debug $ "Source: " ++ show (source (ctxtDim tctx - 1) tctx)
                                      debug $ "Target: " ++ show (target (ctxtDim tctx - 1) tctx)
+
+                                     (srcExp, srcFrm) <- tcExtSrc ty
+                                     (tgtExp, tgtFrm) <- tcExtTgt ty
+
+                                     let ctxVars = ctxtVars tctx
+                                         frmVars = typVars srcFrm -- or tgtFrm, they are the same
+                                         srcVars = frmVars `union` expVars srcExp
+                                         tgtVars = frmVars `union` expVars tgtExp
+                                         tyVars = tgtVars `union` expVars srcExp
+                                         isAlgebraic = ctxVars `isSubsetOf` tyVars
+                                         srcCtxt = if isAlgebraic then tctx else (source (ctxtDim tctx - 1) tctx)
+                                         tgtCtxt = if isAlgebraic then tctx else (target (ctxtDim tctx - 1) tctx)
+
+                                     
+                                     -- Okay, we're all set.  In order to proceed with the typechecking,
+                                     -- we need to extend whatever context we're in with the tree context
+                                     -- variables and the check locally with respect to that context.
+                                     
                                      return ()
+
+                                     -- Okay, now what?  Our goal now is to check the
+                                     -- type.  I don't think coverage or anything will
+                                     -- be that hard. What I'm more worried about is
+                                     -- how they types will be stored in the context.
+
 checkDecl (Def id pms ty exp) = return ()
 
-typEq :: Typ -> Typ -> TCM ()
-typEq t0 t1 = if t0 == t1 then
-                return ()
-              else throwError $ "Unequal types: " ++ show t0 ++ ", " ++ show t1
-                               
--- Okay, this is not quite right.  You have to recurse of the target
--- of the marker until you get a match or hit the botom.
 checkTree :: TCtxt -> [Tele] -> TCM TCtxt
 checkTree tc [] = return tc
 checkTree tc (_:[]) = throwError $ "Context parity violation"
@@ -217,6 +253,11 @@ checkTree tc tl@((Tele tId tFrm):(Tele fId fFrm):ps) =
     (mId, mFrm) | otherwise -> checkTree (TTgt tc) tl
                                                       
 
+checkT :: Typ -> TCM Term
+checkT t = case t of
+  TStar            -> return Star
+  TArr frm src tgt -> undefined
+  
 -- checkT :: Typ -> TCM Term
 -- checkT t = case t of
 --   TStar            -> return Star
@@ -240,12 +281,6 @@ checkTree tc tl@((Tele tId tFrm):(Tele fId fFrm):ps) =
 --                    vT <- check v a
 --                    return (App uT vT, f uD)
                    
-
--- data Exp = EApp Ident [Exp] | EVar Ident
---   deriving (Eq, Ord, Show, Read)
-
--- data Typ = TStar | TArr Typ Exp Exp
---   deriving (Eq, Ord, Show, Read)
 
 debug :: String -> TCM ()
 debug msg = liftIO $ putStrLn msg
