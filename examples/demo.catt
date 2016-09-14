@@ -22,5 +22,12 @@ coh vcomp (x : *)
 	  (h : * | x -> y) (b : * | x -> y | g -> h)
 	  : * | x -> y | f -> h ;
 
-
+coh inter (x : *)
+    	  (y : *) (f : * | x -> y)
+	  (ff : * | x -> y) (a : * | x -> y | f -> ff)
+	  (fff : * | x -> y) (b : * | x -> y | ff -> fff)
+	  (z : *) (g : * | y -> z)
+	  (gg : * | y -> z) (c : * | y -> z | g -> gg)
+	  (ggg : * | y -> z) (d : * | y -> z | gg -> ggg)
+	  : *
 

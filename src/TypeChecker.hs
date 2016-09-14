@@ -72,12 +72,35 @@ evalExp (EApp u v) = AppD (evalExp u) (evalExp v)
 
 data TCtxt = TNil Ident
            | TCns TCtxt (Ident, Typ) (Ident, Typ)
-           deriving Show
+           | TTgt TCtxt 
+
+printCtxt :: TCtxt -> String           
+printCtxt (TNil id) = "(" ++ printTree id ++ " : *)"
+printCtxt (TCns tc (tId, tFrm) (fId, fFrm)) =
+  printCtxt tc ++ " " ++ printTree (Tele tId tFrm) ++ " " ++ printTree (Tele fId fFrm)
+printCtxt (TTgt tc) = printCtxt tc
+
+instance Show TCtxt where
+  -- Possibly print the head too?
+  show = printCtxt
+  
+lookupTc :: TCtxt -> Ident -> Typ
+lookupTc (TNil id) id' | id == id' = TStar
+lookupTc (TNil id) id' | otherwise = error $ "Tree lookup failed for: " ++ printTree id'
+lookupTc (TCns tc (tId, tFrm) (fId, fFrm)) id' | tId == id' = tFrm
+lookupTc (TCns tc (tId, tFrm) (fId, fFrm)) id' | fId == id' = fFrm
+lookupTc (TCns tc (tId, tFrm) (fId, fFrm)) id' | otherwise = lookupTc tc id'
+lookupTc (TTgt tc) id' = lookupTc tc id'
 
 marker :: TCtxt -> (Ident, Typ)
 marker (TNil id) = (id, TStar)
-marker (TCns _ _ mk) = mk
-
+marker (TCns _ _ f) = f
+marker (TTgt tc) =
+  case marker tc of
+    (mId, TStar) -> error "Target of object marker"
+    (mId, TArr frm _ (EVar tgt)) -> (tgt, frm)
+    _ -> error "Internal error"
+    
 type Gamma = [(Ident, D)]
 type Delta = [(Ident, Typ)]
 
@@ -112,12 +135,16 @@ tcExtTgt (TArr h _ t) = return (t, h)
 tcExtTgt typ = throwError $ "tcExtTgt: " ++ printTree typ
 
 --
---  Operations on Types
+--  Operations on Types and Trees
 --
 
 typeDim :: Typ -> Int
 typeDim TStar = 0
 typeDim (TArr t _ _) = typeDim t + 1
+
+source :: Int -> TCtxt -> TCtxt
+source i (TNil id) = TNil id
+source i (TCns tc (tId, tFrm) (fId, fFrm)) = undefined
 
 --
 --  Typechecking Rules
@@ -136,6 +163,7 @@ checkDecl (Coh id pms ty) =
     (Tele x (TArr _ _ _)) : ps -> throwError $ "Context cannot start with an arrow"
     (Tele x TStar) : ps        -> do tctx <- checkTree (TNil x) ps 
                                      debug $ "Tree okay for " ++ show id
+                                     debug $ "Result: " ++ show tctx
                                      return ()
 checkDecl (Def id pms ty exp) = return ()
 
@@ -144,28 +172,41 @@ typEq t0 t1 = if t0 == t1 then
                 return ()
               else throwError $ "Unequal types: " ++ show t0 ++ ", " ++ show t1
                                
+-- Okay, this is not quite right.  You have to recurse of the target
+-- of the marker until you get a match or hit the botom.
 checkTree :: TCtxt -> [Tele] -> TCM TCtxt
 checkTree tc [] = return tc
 checkTree tc (_:[]) = throwError $ "Context parity violation"
-checkTree tc ((Tele tId tFrm):(Tele fId fFrm):ps) =
+checkTree tc tl@((Tele tId tFrm):(Tele fId fFrm):ps) =
   case (marker tc) of
     (mId, mFrm) | tFrm == mFrm -> let expected = TArr tFrm (EVar mId) (EVar tId)
                                   in if (fFrm == expected)         -- The case of raising a dimension
-                                     then continue
+                                     then checkTree (TCns tc (tId, tFrm) (fId, fFrm)) ps
                                      else throwError $
                                           "Error while checking " ++ printTree fId ++ "\n" ++
                                           "Expected: " ++ printTree expected ++ "\n" ++
                                           "Found: " ++ printTree fFrm
-    (mId, mFrm) | otherwise -> do (tgtId, tgtFrm) <- tcExtTgt mFrm  -- The case of continuing in the current dimension
-                                  (srcId, srcFrm) <- tcExtSrc fFrm
-                                  if (tgtFrm == srcFrm)
-                                    then continue
-                                    else throwError $
-                                         "Source/target mismatch while checking " ++ printTree fId ++ "\n" ++
-                                         "Src: " ++ printTree srcFrm ++ "=/=\n" ++
-                                         "Tgt: " ++ printTree tgtFrm 
 
-  where continue = checkTree (TCns tc (tId, tFrm) (fId, fFrm)) ps
+    -- Try to extend with respect to a target
+    (mId, mFrm) | otherwise -> checkTree (TTgt tc) tl
+
+    -- -- Actually, you don't check anything about the target here.  That
+    -- -- can't be right....
+    -- (mId, mFrm) | otherwise -> do (tgtId, tgtFrm) <- tcExtTgt mFrm  -- The case of continuing in the current dimension
+    --                               (srcId, srcFrm) <- tcExtSrc fFrm
+    --                               if (tgtFrm == srcFrm)
+    --                                 then continue
+    --                                 else throwError $
+    --                                      "Source/target mismatch while checking " ++ printTree fId ++ "\n" ++
+    --                                      "Src: " ++ printTree srcFrm ++ "=/=\n" ++
+    --                                      "Tgt: " ++ printTree tgtFrm 
+
+
+        -- tgtMatch TStar sf = throwError $ "No match for source frm: " ++ printTree sf
+        -- tgtMatch (TArr tf _ tid) sf = if (tf == sf) then
+        --                                 return (tid, tf)
+        --                               else tgtMatch tf sf
+                                                      
 
 -- checkT :: Typ -> TCM Term
 -- checkT t = case t of
