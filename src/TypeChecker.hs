@@ -70,32 +70,22 @@ evalExp (EApp u v) = AppD (evalExp u) (evalExp v)
 --  Typechecking Environment
 --
 
+data TCtxt = TNil Ident
+           | TCns TCtxt (Ident, Typ) (Ident, Typ)
+           deriving Show
+
+marker :: TCtxt -> (Ident, Typ)
+marker (TNil id) = (id, TStar)
+marker (TCns _ _ mk) = mk
+
 type Gamma = [(Ident, D)]
 type Delta = [(Ident, Typ)]
 
-data TCEnv = TCEnv
-  { gma :: Gamma
-  , del :: Delta
-  , mkr :: (Ident,Typ)
-  }
+data TCEnv = TCEnv { gma :: Gamma }
 
 -- Yeah, you should make a real empty environment
 emptyEnv :: TCEnv
-emptyEnv = TCEnv [] [] (Ident "", TStar)
-  
-startTree :: Ident -> Typ -> TCEnv -> TCEnv
-startTree id typ env = TCEnv (gma env) [(id,typ)] (id, typ)
-  
-extendTree :: (Ident, Typ) -> (Ident, Typ) -> TCEnv -> TCEnv
-extendTree t f env = TCEnv (gma env) (f:t:(del env)) f
-
--- withVar :: Ident -> D -> TCEnv -> TCEnv
--- withVar id d (TCEnv gma rho mkr) =
---   TCEnv ((id, d):gma) (UpVar rho id d) mkr
-
--- withExt :: Ident -> D -> Ident -> D -> TCEnv -> TCEnv
--- withExt t tD f fD (TCEnv gma rho mkr) =
---   TCEnv ((f,fD):(t,tD):gma) (UpVar (UpVar rho t tD) f fD) (f,fD)
+emptyEnv = TCEnv [] 
 
 --
 --  Typechecking Monad
@@ -144,8 +134,7 @@ checkDecl (Coh id pms ty) =
   case pms of
     []                         -> throwError $ "Nothing to be done in empty context"
     (Tele x (TArr _ _ _)) : ps -> throwError $ "Context cannot start with an arrow"
-    (Tele x TStar) : ps        -> local (startTree x TStar) $
-                                  do _ <- checkTree ps ty
+    (Tele x TStar) : ps        -> do tctx <- checkTree (TNil x) ps 
                                      debug $ "Tree okay for " ++ show id
                                      return ()
 checkDecl (Def id pms ty exp) = return ()
@@ -155,21 +144,19 @@ typEq t0 t1 = if t0 == t1 then
                 return ()
               else throwError $ "Unequal types: " ++ show t0 ++ ", " ++ show t1
                                
-
-checkTree :: [Tele] -> Typ -> TCM ()
-checkTree [] ty = return ()
-checkTree (_:[]) _ = throwError $ "Uneven extension length"
-checkTree ((Tele tId tFrm):(Tele fId fFrm):ps) ty = do
-  m <- reader mkr
-  case m of
+checkTree :: TCtxt -> [Tele] -> TCM TCtxt
+checkTree tc [] = return tc
+checkTree tc (_:[]) = throwError $ "Context parity violation"
+checkTree tc ((Tele tId tFrm):(Tele fId fFrm):ps) =
+  case (marker tc) of
     (mId, mFrm) | tFrm == mFrm -> let expected = TArr tFrm (EVar mId) (EVar tId)
-                                  in if (fFrm == expected)  -- The case of raising a dimension
+                                  in if (fFrm == expected)         -- The case of raising a dimension
                                      then continue
                                      else throwError $
                                           "Error while checking " ++ printTree fId ++ "\n" ++
                                           "Expected: " ++ printTree expected ++ "\n" ++
                                           "Found: " ++ printTree fFrm
-    (mId, mFrm) | otherwise -> do (tgtId, tgtFrm) <- tcExtTgt mFrm              -- The case of continuing in the current dimension
+    (mId, mFrm) | otherwise -> do (tgtId, tgtFrm) <- tcExtTgt mFrm  -- The case of continuing in the current dimension
                                   (srcId, srcFrm) <- tcExtSrc fFrm
                                   if (tgtFrm == srcFrm)
                                     then continue
@@ -178,8 +165,8 @@ checkTree ((Tele tId tFrm):(Tele fId fFrm):ps) ty = do
                                          "Src: " ++ printTree srcFrm ++ "=/=\n" ++
                                          "Tgt: " ++ printTree tgtFrm 
 
-  where continue = local (extendTree (tId, tFrm) (fId, fFrm)) (checkTree ps ty)
-  
+  where continue = checkTree (TCns tc (tId, tFrm) (fId, fFrm)) ps
+
 -- checkT :: Typ -> TCM Term
 -- checkT t = case t of
 --   TStar            -> return Star
