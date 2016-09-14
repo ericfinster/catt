@@ -142,9 +142,33 @@ typeDim :: Typ -> Int
 typeDim TStar = 0
 typeDim (TArr t _ _) = typeDim t + 1
 
+ctxtDim :: TCtxt -> Int
+ctxtDim (TNil id) = 0
+ctxtDim (TCns tc (tId, tFrm) (fId, fFrm)) = max (typeDim fFrm) (ctxtDim tc)
+ctxtDim (TTgt tc) = ctxtDim tc  
+  
 source :: Int -> TCtxt -> TCtxt
 source i (TNil id) = TNil id
-source i (TCns tc (tId, tFrm) (fId, fFrm)) = undefined
+source i (TCns tc (tId, tFrm) (fId, fFrm)) | i <= typeDim tFrm = source i tc
+source i (TCns tc (tId, tFrm) (fId, fFrm)) | i > typeDim tFrm = TCns (source i tc) (tId, tFrm) (fId, fFrm)
+source i (TTgt tc) = TTgt (source i tc)
+
+target :: Int -> TCtxt -> TCtxt
+target i (TNil id) = TNil id
+target i (TCns tc (tId, tFrm) (fId, fFrm)) | i <= typeDim tFrm = target i (rewindTo tId tFrm tc)
+
+  where rewindTo tgtId tgtFrm (TNil id) = TNil tgtId
+        rewindTo tgtId tgtFrm (TTgt tc) = rewindTo tgtId tgtFrm tc
+        rewindTo tgtId tgtFrm (TCns tc' (pId, pFrm) (qId, qFrm)) | tgtFrm == qFrm = TCns tc' (pId, pFrm) (tgtId, tgtFrm)
+        rewindTo tgtId tgtFrm (TCns tc' (pId, pFrm) (qId, qFrm)) | otherwise = rewindTo tgtId tgtFrm tc'
+                              
+  -- This is trickier.  We want to rewind to the place where the source
+  -- was added, necessarily, I suppose as a filler, and replace that source
+  -- extension with the value of the target.
+                                           
+
+target i (TCns tc (tId, tFrm) (fId, fFrm)) | i > typeDim tFrm = TCns (target i tc) (tId, tFrm) (fId, fFrm)
+target i (TTgt tc) = TTgt (target i tc)
 
 --
 --  Typechecking Rules
@@ -164,6 +188,8 @@ checkDecl (Coh id pms ty) =
     (Tele x TStar) : ps        -> do tctx <- checkTree (TNil x) ps 
                                      debug $ "Tree okay for " ++ show id
                                      debug $ "Result: " ++ show tctx
+                                     debug $ "Source: " ++ show (source (ctxtDim tctx - 1) tctx)
+                                     debug $ "Target: " ++ show (target (ctxtDim tctx - 1) tctx)
                                      return ()
 checkDecl (Def id pms ty exp) = return ()
 
@@ -189,23 +215,6 @@ checkTree tc tl@((Tele tId tFrm):(Tele fId fFrm):ps) =
 
     -- Try to extend with respect to a target
     (mId, mFrm) | otherwise -> checkTree (TTgt tc) tl
-
-    -- -- Actually, you don't check anything about the target here.  That
-    -- -- can't be right....
-    -- (mId, mFrm) | otherwise -> do (tgtId, tgtFrm) <- tcExtTgt mFrm  -- The case of continuing in the current dimension
-    --                               (srcId, srcFrm) <- tcExtSrc fFrm
-    --                               if (tgtFrm == srcFrm)
-    --                                 then continue
-    --                                 else throwError $
-    --                                      "Source/target mismatch while checking " ++ printTree fId ++ "\n" ++
-    --                                      "Src: " ++ printTree srcFrm ++ "=/=\n" ++
-    --                                      "Tgt: " ++ printTree tgtFrm 
-
-
-        -- tgtMatch TStar sf = throwError $ "No match for source frm: " ++ printTree sf
-        -- tgtMatch (TArr tf _ tid) sf = if (tf == sf) then
-        --                                 return (tid, tf)
-        --                               else tgtMatch tf sf
                                                       
 
 -- checkT :: Typ -> TCM Term

@@ -29,5 +29,11 @@ coh inter (x : *)
 	  (z : *) (g : * | y -> z)
 	  (gg : * | y -> z) (c : * | y -> z | g -> gg)
 	  (ggg : * | y -> z) (d : * | y -> z | gg -> ggg)
-	  : *
+	  : * ;
 
+coh wball (x : *)
+    	  (y : *) (f : * | x -> y)
+	  (z : *) (g : * | y -> z)
+	  (h : * | y -> z) (a : * | y -> z | g -> h)
+	  (b : * | y -> z | g -> h) (s : * | y -> z | g -> h | a -> b)
+	  : *
