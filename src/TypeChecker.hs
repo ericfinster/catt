@@ -277,7 +277,6 @@ checkDecl (Coh id pms ty) =
                                      debug $ "Checking coherence: " ++ printTree id
                                      tctx <- checkTree (TNil x) ps 
                                      debug $ "Valid tree context"
-                                     debug $ "Result: " ++ show tctx
 
                                      (TCEnv gma rho) <- ask
 

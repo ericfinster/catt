@@ -11,11 +11,11 @@ coh comp (x : *)
 
 coh unitl (x : *)
     	  (y : *) (f : * | x -> y)
-	  : * | x -> y | #comp x x (id x) y f -> f ;
+	  : * | x -> y | #comp x x (#id x) y f -> f ;
 
 coh unitr (x : *)
     	  (y : *) (f : * | x -> y)
-	  : * | x -> y | #comp x y f y (id y) -> f ;
+	  : * | x -> y | #comp x y f y (#id y) -> f ;
 	  
 coh whiskerl (x : *)
     	     (y : *) (f : * | x -> y)
@@ -35,8 +35,8 @@ coh assoc (x : *)
     	  (y : *) (f : * | x -> y)
           (z : *) (g : * | y -> z)
 	  (w : *) (h : * | z -> w)
-	  : * | x -> w | #comp x z (comp x y f z g) w h ->
-	      	       	 #comp x y f w (comp y z g w h) ;
+	  : * | x -> w | #comp x z (#comp x y f z g) w h ->
+	      	       	 #comp x y f w (#comp y z g w h) ;
 
 coh vcomp (x : *)
     	  (y : *) (f : * | x -> y)
