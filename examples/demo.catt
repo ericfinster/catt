@@ -72,3 +72,7 @@ coh ichg (x : *)
 	     #vcomp x z (#comp x y f z l)
 	     	    (#comp x y g z m) (#hcomp x y f g a z l m c)
 		    (#comp x y h z n) (#hcomp x y g h b z m n d) ;
+
+coh inv (x : *)
+    	(y : *) (f : * | x -> y)
+	: * | y -> x ;

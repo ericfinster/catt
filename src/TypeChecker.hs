@@ -310,8 +310,10 @@ checkDecl (Coh id pms ty) =
                                                debug $ "Source context: " ++ show srcCtxt
                                                debug $ "Target context: " ++ show tgtCtxt
 
-                                               _ <- verify (ctxtVars srcCtxt `isSubsetOf` srcVars) "Source is not algebraic"
-                                               _ <- verify (ctxtVars tgtCtxt `isSubsetOf` tgtVars) "Target is not algebraic"
+                                               _ <- verify (ctxtVars srcCtxt `isSubsetOf` srcVars) $
+                                                    "Source is not algebraic for " ++ printTree srcExp ++ " : " ++ printTree srcFrm
+                                               _ <- verify (ctxtVars tgtCtxt `isSubsetOf` tgtVars) $
+                                                    "Target is not algebraic for " ++ printTree tgtExp ++ " : " ++ printTree tgtFrm
 
                                                (sFrmT, sExpT) <- local (withTree srcCtxt) $ do srcFrmT <- checkT srcFrm
                                                                                                srcFrmD <- tcEval srcFrmT
@@ -327,7 +329,6 @@ checkDecl (Coh id pms ty) =
                                                    cohD = eval cohTyTm rho
 
                                                debug $ "Finished: " ++ printTree id ++ " : " ++ show cohTyTm
-                                               -- _ <- tcPrintDom cohD
 
                                                return $ TCEnv ((id,cohD):gma) (UpCoh rho id)
 
@@ -362,9 +363,7 @@ checkT t = case t of
                          return $ Arr frmT srcT tgtT
 
 check :: Exp -> D -> TCM Term
-check e t = do --k <- tcDepth
-               --debug $ "Checking " ++ printTree e ++ " has type " ++ show (rb t k)
-               (eTm, eTy) <- checkI e
+check e t = do (eTm, eTy) <- checkI e
                k <- tcDepth
                let t0 = rb t k
                    t1 = rb eTy k
@@ -377,20 +376,12 @@ checkI e =
     EVar id  -> do ty <- tcLookup id 
                    return (Var id, ty)
     ECoh id  -> do ty <- tcLookup id
-                   --debug $ "Coherence lookup for " ++ printTree id ++ " gives:"
-                   -- _ <- tcPrintDom ty
                    return (Cohr id, ty)
-    EApp u v -> do --debug $ "Inferring type of " ++ printTree u
-                   (uT, uTy) <- checkI u
-                   -- _ <- tcPrintDom uTy
-                   -- uD <- tcEval uT
+    EApp u v -> do (uT, uTy) <- checkI u
                    (a, f) <- tcExtPi uTy
                    vT <- check v a
                    vD <- tcEval vT
-                   let rTy = f vD
-                   -- debug $ "After evaluation, we have: "
-                   -- _ <- tcPrintDom rTy
-                   return (App uT vT, rTy)
+                   return (App uT vT, f vD)
                    
 
 debug :: String -> TCM ()
