@@ -125,7 +125,15 @@ marker (TTgt tc) =
     (mId, TStar) -> error "Target of object marker"
     (mId, TArr frm _ (EVar tgt)) -> (tgt, frm)
     _ -> error "Internal error"
-    
+
+abstractTree :: TCtxt -> Term -> Term
+abstractTree (TNil id) tm = Pi id Star tm
+abstractTree (TTgt tc) tm = abstractTree tc tm
+abstractTree (TCns tc (tId, tFrm) (fId, fFrm)) tm = 
+  let fTy = typToTerm fFrm
+      tTy = typToTerm tFrm
+  in abstractTree tc $ Pi tId tTy $ Pi fId fTy tm
+  
 type Gamma = [(Ident, D)]
 data TCEnv = TCEnv { gma :: Gamma
                    , rho :: Rho
@@ -237,7 +245,7 @@ checkDecls (d:ds) = do _ <- checkDecl d
                        _ <- checkDecls ds
                        return ()
 
-checkDecl :: Decl -> TCM ()
+checkDecl :: Decl -> TCM TCEnv
 checkDecl (Coh id pms ty) =
   case pms of
     []                         -> throwError $ "Nothing to be done in empty context"
@@ -248,31 +256,51 @@ checkDecl (Coh id pms ty) =
                                      debug $ "Source: " ++ show (source (ctxtDim tctx - 1) tctx)
                                      debug $ "Target: " ++ show (target (ctxtDim tctx - 1) tctx)
 
-                                     (srcExp, srcFrm) <- tcExtSrc ty
-                                     (tgtExp, tgtFrm) <- tcExtTgt ty
+                                     (TCEnv gma rho) <- ask
 
                                      let ctxVars = ctxtVars tctx
-                                         frmVars = typVars srcFrm -- or tgtFrm, they are the same
-                                         srcVars = frmVars `union` expVars srcExp
-                                         tgtVars = frmVars `union` expVars tgtExp
-                                         tyVars = tgtVars `union` expVars srcExp
+                                         tyVars = typVars ty
                                          isAlgebraic = ctxVars `isSubsetOf` tyVars
-                                         srcCtxt = if isAlgebraic then tctx else (source (ctxtDim tctx - 1) tctx)
-                                         tgtCtxt = if isAlgebraic then tctx else (target (ctxtDim tctx - 1) tctx)
-                                     
-                                     -- _ <- local (withTree srcCtxt) $ do srcFrmT <- checkT srcFrm
-                                     --                                    srcExpT <- check srcExp srcFrmT
-                                     --                                    return ()
-                                     -- _ <- local (withTree tgtCtxt) $ do tgtFrmT <- checkT tgtFrm
-                                     --                                    tgtExpT <- check tgtExp tgtFrmT
-                                     --                                    return ()
-                                     
-                                     -- The last thing is that each of the source/target needs to be
-                                     -- algebraic in it's respective context.
-                                     
-                                     return ()
 
-checkDecl (Def id pms ty exp) = return ()
+                                     if (isAlgebraic)
+
+                                       then do tyTm <- local (withTree tctx) (checkT ty)
+                                               let cohTyTm = abstractTree tctx tyTm
+                                                   cohD = eval cohTyTm rho
+                                     
+                                               return $ TCEnv ((id,cohD):gma) (UpCoh rho id)
+
+                                       else do (srcExp, srcFrm) <- tcExtSrc ty
+                                               (tgtExp, tgtFrm) <- tcExtTgt ty
+
+                                               let frmVars = typVars srcFrm -- or tgtFrm, they are the same
+                                                   srcVars = frmVars `union` expVars srcExp
+                                                   tgtVars = frmVars `union` expVars tgtExp
+                                                   tctxDim = ctxtDim tctx
+                                                   srcCtxt = source (tctxDim - 1) tctx
+                                                   tgtCtxt = target (tctxDim - 1) tctx
+                                               
+                                               _ <- verify (ctxtVars srcCtxt `isSubsetOf` srcVars) "Source is not algebraic"
+                                               _ <- verify (ctxtVars tgtCtxt `isSubsetOf` tgtVars) "Target is not algebraic"
+
+                                               (sFrmT, sExpT) <- local (withTree srcCtxt) $ do srcFrmT <- checkT srcFrm
+                                                                                               srcFrmD <- tcEval srcFrmT
+                                                                                               srcExpT <- check srcExp srcFrmD
+                                                                                               return (srcFrmT, srcExpT)
+                                               (tFrmT, tExpT) <- local (withTree tgtCtxt) $ do tgtFrmT <- checkT tgtFrm
+                                                                                               tgtFrmD <- tcEval tgtFrmT
+                                                                                               tgtExpT <- check tgtExp tgtFrmD
+                                                                                               return (tgtFrmT, tgtExpT)
+                                     
+                                               let tyTm = Arr sFrmT sExpT tExpT
+                                                   cohTyTm = abstractTree tctx tyTm
+                                                   cohD = eval cohTyTm rho
+
+                                               return $ TCEnv ((id,cohD):gma) (UpCoh rho id)
+
+  where verify b s = if b then return () else throwError s                                                   
+
+checkDecl (Def id pms ty exp) = undefined 
 
 checkTree :: TCtxt -> [Tele] -> TCM TCtxt
 checkTree tc [] = return tc
