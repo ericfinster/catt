@@ -11,11 +11,11 @@ coh comp (x : *)
 
 coh unitl (x : *)
     	  (y : *) (f : * | x -> y)
-	  : * | x -> y | comp x x (id x) y f -> f ;
+	  : * | x -> y | #comp x x (id x) y f -> f ;
 
 coh unitr (x : *)
     	  (y : *) (f : * | x -> y)
-	  : * | x -> y | comp x y f y (id y) -> f ;
+	  : * | x -> y | #comp x y f y (id y) -> f ;
 	  
 coh whiskerl (x : *)
     	     (y : *) (f : * | x -> y)
@@ -44,3 +44,31 @@ coh vcomp (x : *)
 	  (h : * | x -> y) (b : * | x -> y | g -> h)
 	  : * | x -> y | f -> h ;
 
+coh hcomp (x : *)
+    	  (y : *) (f : * | x -> y)
+	  (g : * | x -> y) (a : * | x -> y | f -> g)
+	  (z : *) (h : * | y -> z)
+	  (k : * | y -> z) (b : * | y -> z | h -> k)
+	  : * | x -> z | #comp x y f z h -> #comp x y g z k ;
+	  
+coh icomp (x : *)
+    	  (y : *) (f : * | x -> y)
+	  (g : * | x -> y) (a : * | x -> y | f -> g)
+	  (h : * | x -> y) (b : * | x -> y | g -> h)
+	  (z : *) (l : * | y -> z)
+	  (m : * | y -> z) (c : * | y -> z | l -> m)
+	  (n : * | y -> z) (d : * | y -> z | m -> n)
+	  : * | x -> z | #comp x y f z l -> #comp x y h z n ;
+
+coh ichg (x : *)
+    	 (y : *) (f : * | x -> y)
+	 (g : * | x -> y) (a : * | x -> y | f -> g)
+	 (h : * | x -> y) (b : * | x -> y | g -> h)
+	 (z : *) (l : * | y -> z)
+	 (m : * | y -> z) (c : * | y -> z | l -> m)
+	 (n : * | y -> z) (d : * | y -> z | m -> n)
+	 : * | x -> z | #comp x y f z l -> #comp x y h z n | 
+	     #hcomp x y f h (#vcomp x y f g a h b) z l n (#vcomp y z l m c n d) ->
+	     #vcomp x z (#comp x y f z l)
+	     	    (#comp x y g z m) (#hcomp x y f g a z l m c)
+		    (#comp x y h z n) (#hcomp x y g h b z m n d) ;
