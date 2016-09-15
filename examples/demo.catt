@@ -9,12 +9,34 @@ coh comp (x : *)
 	 (z : *) (g : * | y -> z)
 	 : * | x -> z ;
 
+coh unitl (x : *)
+    	  (y : *) (f : * | x -> y)
+	  : * | x -> y | comp x x (id x) y f -> f ;
+
+coh unitr (x : *)
+    	  (y : *) (f : * | x -> y)
+	  : * | x -> y | comp x y f y (id y) -> f ;
+	  
+coh whiskerl (x : *)
+    	     (y : *) (f : * | x -> y)
+	     (z : *) (g : * | y -> z)
+	     (h : * | y -> z) (a : * | y -> z | g -> h)
+	     : * | x -> z | #comp x y f z g ->
+	       	     	    #comp x y f z h ;
+	     
+coh whiskerr (x : *)
+    	     (y : *) (f : * | x -> y)
+	     (g : * | x -> y) (a : * | x -> y | f -> g)
+	     (z : *) (h : * | y -> z)
+	     : * | x -> z | #comp x y f z h ->
+	       	     	    #comp x y g z h ;
+	     
 coh assoc (x : *)
     	  (y : *) (f : * | x -> y)
           (z : *) (g : * | y -> z)
 	  (w : *) (h : * | z -> w)
-	  : * | x -> w | #comp x z w (comp x y z f g) h ->
-	      	       	 #comp x y w f (comp y z w g h) ;
+	  : * | x -> w | #comp x z (comp x y f z g) w h ->
+	      	       	 #comp x y f w (comp y z g w h) ;
 
 coh vcomp (x : *)
     	  (y : *) (f : * | x -> y)
@@ -22,18 +44,3 @@ coh vcomp (x : *)
 	  (h : * | x -> y) (b : * | x -> y | g -> h)
 	  : * | x -> y | f -> h ;
 
-coh inter (x : *)
-    	  (y : *) (f : * | x -> y)
-	  (ff : * | x -> y) (a : * | x -> y | f -> ff)
-	  (fff : * | x -> y) (b : * | x -> y | ff -> fff)
-	  (z : *) (g : * | y -> z)
-	  (gg : * | y -> z) (c : * | y -> z | g -> gg)
-	  (ggg : * | y -> z) (d : * | y -> z | gg -> ggg)
-	  : * ;
-
-coh wball (x : *)
-    	  (y : *) (f : * | x -> y)
-	  (z : *) (g : * | y -> z)
-	  (h : * | y -> z) (a : * | y -> z | g -> h)
-	  (b : * | y -> z | g -> h) (s : * | y -> z | g -> h | a -> b)
-	  : *

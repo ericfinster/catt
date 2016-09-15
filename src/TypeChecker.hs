@@ -12,6 +12,8 @@ import Control.Monad.Reader
 import Syntax.AbsCatt
 import Syntax.PrintCatt
 
+import Debug.Trace
+
 --
 --  Semantic Domain
 --
@@ -31,8 +33,20 @@ data Term = Type | Star
           | Arr Term Term Term
           | Pi Ident Term Term
           | App Term Term
-          deriving (Eq, Show)
+          deriving Eq
 
+printTerm :: Term -> String
+printTerm Type = "Type"
+printTerm Star = "*"
+printTerm (Var id) = printTree id
+printTerm (Cohr id) = "#" ++ printTree id
+printTerm (Arr frm src tgt) = printTerm frm ++ " | " ++ printTerm src ++ " -> " ++ printTerm tgt
+printTerm (Pi id ty tm) = "(" ++ printTree id ++ " : " ++ printTerm ty ++ ") -> " ++ printTerm tm
+printTerm (App u v) = printTerm u ++ " " ++ printTerm v
+
+instance Show Term where
+  show = printTerm
+  
 --
 --  Evaluation and Readback
 --
@@ -147,8 +161,14 @@ appendTree (TCns tc (tId,tFrm) (fId, fFrm)) gma =
   in (fId,fTy):(tId,tTy):(appendTree tc gma)
 appendTree (TTgt tc) gma = appendTree tc gma
 
+withVar :: Ident -> Typ -> TCEnv -> TCEnv
+withVar id typ (TCEnv gma rho) = TCEnv ((id,typToDom typ):gma)  (UpVar rho id (VarD id))
+
 withTree :: TCtxt -> TCEnv -> TCEnv
-withTree tc env = TCEnv (appendTree tc $ gma env) (rho env)
+withTree (TNil id) = withVar id TStar
+withTree (TTgt tc) = withTree tc
+withTree (TCns tc (tId,tFrm) (fId, fFrm)) =
+  (withVar fId fFrm) . (withVar tId tFrm) . (withTree tc)
 
 -- Yeah, you should make a real empty environment
 emptyEnv :: TCEnv
@@ -164,11 +184,17 @@ tcLookup :: Ident -> TCM D
 tcLookup id = do gma <- reader gma
                  case lookup id gma of
                    Just ty -> return ty
-                   Nothing -> throwError $ "Unknown identifier: " ++ show id
+                   Nothing -> throwError $
+                              "Unknown identifier: " ++ show id ++ 
+                              "\nIds: " ++ show (fmap fst gma)
 
 tcDepth :: TCM Int
 tcDepth = reader (lRho . rho)
 
+tcPrintDom :: D -> TCM ()
+tcPrintDom d = do k <- tcDepth
+                  debug $ show (rb d k)
+                    
 tcEval :: Term -> TCM D
 tcEval t = do rho <- reader rho
               return (eval t rho)
@@ -241,8 +267,8 @@ target i (TTgt tc) = TTgt (target i tc)
 
 checkDecls :: [Decl] -> TCM ()
 checkDecls [] = return ()
-checkDecls (d:ds) = do _ <- checkDecl d
-                       _ <- checkDecls ds
+checkDecls (d:ds) = do env <- checkDecl d
+                       _ <- local (\_ -> env) (checkDecls ds)
                        return ()
 
 checkDecl :: Decl -> TCM TCEnv
@@ -250,11 +276,11 @@ checkDecl (Coh id pms ty) =
   case pms of
     []                         -> throwError $ "Nothing to be done in empty context"
     (Tele x (TArr _ _ _)) : ps -> throwError $ "Context cannot start with an arrow"
-    (Tele x TStar) : ps        -> do tctx <- checkTree (TNil x) ps 
+    (Tele x TStar) : ps        -> do debug $ "========================="
+                                     debug $ "Checking coherence: " ++ show id
+                                     tctx <- checkTree (TNil x) ps 
                                      debug $ "Tree okay for " ++ show id
                                      debug $ "Result: " ++ show tctx
-                                     debug $ "Source: " ++ show (source (ctxtDim tctx - 1) tctx)
-                                     debug $ "Target: " ++ show (target (ctxtDim tctx - 1) tctx)
 
                                      (TCEnv gma rho) <- ask
 
@@ -264,13 +290,18 @@ checkDecl (Coh id pms ty) =
 
                                      if (isAlgebraic)
 
-                                       then do tyTm <- local (withTree tctx) (checkT ty)
+                                       then do debug $ "Algebraic case"
+                                               tyTm <- local (withTree tctx) (checkT ty)
                                                let cohTyTm = abstractTree tctx tyTm
                                                    cohD = eval cohTyTm rho
-                                     
+
+                                               debug $ "Finished: " ++ printTree id ++ " : " ++ show cohTyTm
+                                               -- _ <- tcPrintDom cohD
+                                               
                                                return $ TCEnv ((id,cohD):gma) (UpCoh rho id)
 
-                                       else do (srcExp, srcFrm) <- tcExtSrc ty
+                                       else do debug $ "Src/Tgt check forced"
+                                               (srcExp, srcFrm) <- tcExtSrc ty
                                                (tgtExp, tgtFrm) <- tcExtTgt ty
 
                                                let frmVars = typVars srcFrm -- or tgtFrm, they are the same
@@ -280,6 +311,9 @@ checkDecl (Coh id pms ty) =
                                                    srcCtxt = source (tctxDim - 1) tctx
                                                    tgtCtxt = target (tctxDim - 1) tctx
                                                
+                                               debug $ "Source context: " ++ show srcCtxt
+                                               debug $ "Target context: " ++ show tgtCtxt
+
                                                _ <- verify (ctxtVars srcCtxt `isSubsetOf` srcVars) "Source is not algebraic"
                                                _ <- verify (ctxtVars tgtCtxt `isSubsetOf` tgtVars) "Target is not algebraic"
 
@@ -295,6 +329,9 @@ checkDecl (Coh id pms ty) =
                                                let tyTm = Arr sFrmT sExpT tExpT
                                                    cohTyTm = abstractTree tctx tyTm
                                                    cohD = eval cohTyTm rho
+
+                                               debug $ "Finished: " ++ printTree id ++ " : " ++ show cohTyTm
+                                               -- _ <- tcPrintDom cohD
 
                                                return $ TCEnv ((id,cohD):gma) (UpCoh rho id)
 
@@ -329,7 +366,9 @@ checkT t = case t of
                          return $ Arr frmT srcT tgtT
 
 check :: Exp -> D -> TCM Term
-check e t = do (eTm, eTy) <- checkI e
+check e t = do --k <- tcDepth
+               --debug $ "Checking " ++ printTree e ++ " has type " ++ show (rb t k)
+               (eTm, eTy) <- checkI e
                k <- tcDepth
                let t0 = rb t k
                    t1 = rb eTy k
@@ -342,12 +381,20 @@ checkI e =
     EVar id  -> do ty <- tcLookup id 
                    return (Var id, ty)
     ECoh id  -> do ty <- tcLookup id
+                   --debug $ "Coherence lookup for " ++ printTree id ++ " gives:"
+                   -- _ <- tcPrintDom ty
                    return (Cohr id, ty)
-    EApp u v -> do (uT, uTy) <- checkI u
-                   uD <- tcEval uT
+    EApp u v -> do --debug $ "Inferring type of " ++ printTree u
+                   (uT, uTy) <- checkI u
+                   -- _ <- tcPrintDom uTy
+                   -- uD <- tcEval uT
                    (a, f) <- tcExtPi uTy
                    vT <- check v a
-                   return (App uT vT, f uD)
+                   vD <- tcEval vT
+                   let rTy = f vD
+                   -- debug $ "After evaluation, we have: "
+                   -- _ <- tcPrintDom rTy
+                   return (App uT vT, rTy)
                    
 
 debug :: String -> TCM ()
