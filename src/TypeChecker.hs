@@ -12,8 +12,6 @@ import Control.Monad.Reader
 import Syntax.AbsCatt
 import Syntax.PrintCatt
 
-import Debug.Trace
-
 --
 --  Semantic Domain
 --
@@ -170,7 +168,6 @@ withTree (TTgt tc) = withTree tc
 withTree (TCns tc (tId,tFrm) (fId, fFrm)) =
   (withVar fId fFrm) . (withVar tId tFrm) . (withTree tc)
 
--- Yeah, you should make a real empty environment
 emptyEnv :: TCEnv
 emptyEnv = TCEnv [] RNil
 
@@ -277,9 +274,9 @@ checkDecl (Coh id pms ty) =
     []                         -> throwError $ "Nothing to be done in empty context"
     (Tele x (TArr _ _ _)) : ps -> throwError $ "Context cannot start with an arrow"
     (Tele x TStar) : ps        -> do debug $ "========================="
-                                     debug $ "Checking coherence: " ++ show id
+                                     debug $ "Checking coherence: " ++ printTree id
                                      tctx <- checkTree (TNil x) ps 
-                                     debug $ "Tree okay for " ++ show id
+                                     debug $ "Valid tree context"
                                      debug $ "Result: " ++ show tctx
 
                                      (TCEnv gma rho) <- ask
