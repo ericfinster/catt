@@ -4,10 +4,37 @@
 
 coh id (x : *) : * | x -> x ;
 
+--
+-- The folowing coherence for invertibility
+-- fails as expected.
+-- 
+-- coh inv (x : *)
+--     	(y : *) (f : * | x -> y)
+-- 	: * | y -> x ;
+--
+
 coh comp (x : *)
     	 (y : *) (f : * | x -> y)
 	 (z : *) (g : * | y -> z)
 	 : * | x -> z ;
+
+-- def compl (x : *)
+--     	  (y : *) (f : * | x -> y)
+-- 	  (z : *) (g : * | y -> z)
+-- 	  (w : *) (h : * | z -> w)
+-- 	  : * | x -> w = comp x z (comp x y f z g) w h ;
+
+--
+-- Represented as:
+-- \x. \y. \f. \z. \g. \w. \h. comp x z (comp x y f z g) w h ;
+--
+
+--
+-- def compLeft (x : *)
+--              (y : *) (f : * | x -> y)
+-- 	        (z : *) (g : * | y -> z)
+-- 	        (w : *) (h : * | z -> w)
+-- 	        : Σ (* | x -> z) (\p -> * | z -> w) = (comp x y f z g , h) ;
 
 coh unitl (x : *)
     	  (y : *) (f : * | x -> y)
@@ -31,12 +58,12 @@ coh whiskerr (x : *)
 	     : * | x -> z | #comp x y f z h ->
 	       	     	    #comp x y g z h ;
 	     
-coh assoc (x : *)
-    	  (y : *) (f : * | x -> y)
-          (z : *) (g : * | y -> z)
-	  (w : *) (h : * | z -> w)
-	  : * | x -> w | #comp x z (#comp x y f z g) w h ->
-	      	       	 #comp x y f w (#comp y z g w h) ;
+coh assocr (x : *)
+    	   (y : *) (f : * | x -> y)
+           (z : *) (g : * | y -> z)
+	   (w : *) (h : * | z -> w)
+	   : * | x -> w | #comp x z (#comp x y f z g) w h ->
+	      	       	  #comp x y f w (#comp y z g w h) ;
 
 coh vcomp (x : *)
     	  (y : *) (f : * | x -> y)
@@ -72,7 +99,3 @@ coh ichg (x : *)
 	     #vcomp x z (#comp x y f z l)
 	     	    (#comp x y g z m) (#hcomp x y f g a z l m c)
 		    (#comp x y h z n) (#hcomp x y g h b z m n d) ;
-
-coh inv (x : *)
-    	(y : *) (f : * | x -> y)
-	: * | y -> x ;

@@ -121,11 +121,11 @@ instance Show TCtxt where
   -- Possibly print the head too?
   show = printCtxt
   
-lookupTc :: TCtxt -> Ident -> Typ
-lookupTc (TNil id) id' | id == id' = TStar
-lookupTc (TNil id) id' | otherwise = error $ "Tree lookup failed for: " ++ printTree id'
-lookupTc (TCns tc (tId, tFrm) (fId, fFrm)) id' | tId == id' = tFrm
-lookupTc (TCns tc (tId, tFrm) (fId, fFrm)) id' | fId == id' = fFrm
+lookupTc :: TCtxt -> Ident -> Maybe Typ
+lookupTc (TNil id) id' | id == id' = Just TStar
+lookupTc (TNil id) id' | otherwise = Nothing
+lookupTc (TCns tc (tId, tFrm) (fId, fFrm)) id' | tId == id' = Just tFrm
+lookupTc (TCns tc (tId, tFrm) (fId, fFrm)) id' | fId == id' = Just fFrm
 lookupTc (TCns tc (tId, tFrm) (fId, fFrm)) id' | otherwise = lookupTc tc id'
 lookupTc (TTgt tc) id' = lookupTc tc id'
 
@@ -185,6 +185,12 @@ tcLookup id = do gma <- reader gma
                               "Unknown identifier: " ++ show id ++ 
                               "\nIds: " ++ show (fmap fst gma)
 
+tcIsFresh :: TCtxt -> Ident -> TCM ()
+tcIsFresh tc id = case lookupTc tc id of
+  Nothing -> return ()
+  Just _ -> throwError $
+    "Repeated identifier in context: " ++ printTree id
+  
 tcDepth :: TCM Int
 tcDepth = reader (lRho . rho)
 
@@ -343,7 +349,9 @@ checkTree tc tl@((Tele tId tFrm):(Tele fId fFrm):ps) =
   case (marker tc) of
     (mId, mFrm) | tFrm == mFrm -> let expected = TArr tFrm (EVar mId) (EVar tId)
                                   in if (fFrm == expected)         -- The case of raising a dimension
-                                     then checkTree (TCns tc (tId, tFrm) (fId, fFrm)) ps
+                                     then do _ <- tcIsFresh tc tId
+                                             _ <- tcIsFresh tc fId
+                                             checkTree (TCns tc (tId, tFrm) (fId, fFrm)) ps
                                      else throwError $
                                           "Error while checking " ++ printTree fId ++ "\n" ++
                                           "Expected: " ++ printTree expected ++ "\n" ++
