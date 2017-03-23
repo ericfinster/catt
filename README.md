@@ -2,7 +2,7 @@
 
 Catt is an implementation of a type system for coherence in
 Grothendieck/Maltsiniotis style infinity categories, whose
-theory is outline [here](http://arxiv.org/abs/1009.2331).
+theory is outlined [here](http://arxiv.org/abs/1009.2331).
 
 ## Building
 
