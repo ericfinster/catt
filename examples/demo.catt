@@ -1,5 +1,5 @@
 --
---  demo.catt - demonstation of catt typechecking
+--  demo.catt - demonstration of catt typechecking
 --
 
 coh id (x : *) : * | x -> x ;
