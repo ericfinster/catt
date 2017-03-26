@@ -1,11 +1,11 @@
 --
---  demo.catt - demonstation of catt typechecking
+--  demo.catt - demonstration of catt typechecking
 --
 
 coh id (x : *) : * | x -> x ;
 
 --
--- The folowing coherence for invertibility
+-- The following coherence for invertibility
 -- fails as expected.
 -- 
 -- coh inv (x : *)

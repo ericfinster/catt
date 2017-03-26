@@ -98,9 +98,9 @@ data Rho = RNil
 getRho :: Ident -> Rho -> D
 getRho id' RNil = error $ "Unknown id in environment: " ++ show (printTree id')
 getRho id' (UpCoh rho id) | id == id' = CohD id
-getRho id' (UpCoh rho id) | otherwise = getRho id' rho
+                          | otherwise = getRho id' rho
 getRho id' (UpVar rho id d) | id == id' = d
-getRho id' (UpVar rho id d) | otherwise = getRho id' rho
+                            | otherwise = getRho id' rho
          
 lRho :: Rho -> Int
 lRho RNil = 0
@@ -123,10 +123,10 @@ instance Show TCtxt where
   
 lookupTc :: TCtxt -> Ident -> Maybe Typ
 lookupTc (TNil id) id' | id == id' = Just TStar
-lookupTc (TNil id) id' | otherwise = Nothing
+                       | otherwise = Nothing
 lookupTc (TCns tc (tId, tFrm) (fId, fFrm)) id' | tId == id' = Just tFrm
-lookupTc (TCns tc (tId, tFrm) (fId, fFrm)) id' | fId == id' = Just fFrm
-lookupTc (TCns tc (tId, tFrm) (fId, fFrm)) id' | otherwise = lookupTc tc id'
+                                               | fId == id' = Just fFrm
+                                               | otherwise = lookupTc tc id'
 lookupTc (TTgt tc) id' = lookupTc tc id'
 
 marker :: TCtxt -> (Ident, Typ)
@@ -248,20 +248,20 @@ ctxtDim (TTgt tc) = ctxtDim tc
 --
 source :: Int -> TCtxt -> TCtxt
 source i (TNil id) = TNil id
-source i (TCns tc (tId, tFrm) (fId, fFrm)) | i <= typeDim tFrm = source i tc
 source i (TCns tc (tId, tFrm) (fId, fFrm)) | i > typeDim tFrm = TCns (source i tc) (tId, tFrm) (fId, fFrm)
+                                           | otherwise = source i tc
 source i (TTgt tc) = TTgt (source i tc)
 
 target :: Int -> TCtxt -> TCtxt
 target i (TNil id) = TNil id
-target i (TCns tc (tId, tFrm) (fId, fFrm)) | i <= typeDim tFrm = target i (rewindTo tId tFrm tc)
+target i (TCns tc (tId, tFrm) (fId, fFrm)) | i > typeDim tFrm = TCns (target i tc) (tId, tFrm) (fId, fFrm)
+                                           | otherwise = target i (rewindTo tId tFrm tc)
 
   where rewindTo tgtId tgtFrm (TNil id) = TNil tgtId
         rewindTo tgtId tgtFrm (TTgt tc) = rewindTo tgtId tgtFrm tc
         rewindTo tgtId tgtFrm (TCns tc' (pId, pFrm) (qId, qFrm)) | tgtFrm == qFrm = TCns tc' (pId, pFrm) (tgtId, tgtFrm)
-        rewindTo tgtId tgtFrm (TCns tc' (pId, pFrm) (qId, qFrm)) | otherwise = rewindTo tgtId tgtFrm tc'
+                                                                 | otherwise = rewindTo tgtId tgtFrm tc'
 
-target i (TCns tc (tId, tFrm) (fId, fFrm)) | i > typeDim tFrm = TCns (target i tc) (tId, tFrm) (fId, fFrm)
 target i (TTgt tc) = TTgt (target i tc)
 
 --
@@ -358,7 +358,7 @@ checkTree tc tl@((Tele tId tFrm):(Tele fId fFrm):ps) =
                                           "Found: " ++ printTree fFrm
 
     -- Try to extend with respect to a target
-    (mId, mFrm) | otherwise -> checkTree (TTgt tc) tl
+                | otherwise -> checkTree (TTgt tc) tl
                                                       
 
 checkT :: Typ -> TCM Term
