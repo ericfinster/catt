@@ -249,13 +249,13 @@ ctxtDim (TTgt tc) = ctxtDim tc
 source :: Int -> TCtxt -> TCtxt
 source i (TNil id) = TNil id
 source i (TCns tc (tId, tFrm) (fId, fFrm)) | i > typeDim tFrm = TCns (source i tc) (tId, tFrm) (fId, fFrm)
-                                           | i <= typeDim tFrm = source i tc
+                                           | otherwise = source i tc
 source i (TTgt tc) = TTgt (source i tc)
 
 target :: Int -> TCtxt -> TCtxt
 target i (TNil id) = TNil id
 target i (TCns tc (tId, tFrm) (fId, fFrm)) | i > typeDim tFrm = TCns (target i tc) (tId, tFrm) (fId, fFrm)
-                                           | i <= typeDim tFrm = target i (rewindTo tId tFrm tc)
+                                           | otherwise = target i (rewindTo tId tFrm tc)
 
   where rewindTo tgtId tgtFrm (TNil id) = TNil tgtId
         rewindTo tgtId tgtFrm (TTgt tc) = rewindTo tgtId tgtFrm tc
