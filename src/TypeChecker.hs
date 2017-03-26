@@ -248,8 +248,8 @@ ctxtDim (TTgt tc) = ctxtDim tc
 --
 source :: Int -> TCtxt -> TCtxt
 source i (TNil id) = TNil id
-source i (TCns tc (tId, tFrm) (fId, fFrm)) | i <= typeDim tFrm = source i tc
-                                           | i > typeDim tFrm = TCns (source i tc) (tId, tFrm) (fId, fFrm)
+source i (TCns tc (tId, tFrm) (fId, fFrm)) | i > typeDim tFrm = TCns (source i tc) (tId, tFrm) (fId, fFrm)
+                                           | i <= typeDim tFrm = source i tc
 source i (TTgt tc) = TTgt (source i tc)
 
 target :: Int -> TCtxt -> TCtxt
